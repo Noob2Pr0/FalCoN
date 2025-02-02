@@ -1,5 +1,5 @@
 import random
-import os, sys, platform
+import os, subprocess, platform
 import argparse
 import requests
 from colorama import Fore
@@ -7,6 +7,15 @@ import nmap3
 import json
 import urllib.request
 import re
+import socket
+import signal
+import sys
+
+########## Ctrl+C Signal #########
+def signal_handler(sig, frame):
+    print(Fore.YELLOW+'You pressed Ctrl+C!'+Fore.WHITE)
+    sys.exit(0)
+
 
 def clear():
     plat=platform.system()
@@ -22,7 +31,7 @@ def banner():
  | |__ __ _| | |     ___ |  \| |
  |  __/ _` | | |    / _ \| . ` |
  | | | (_| | | |___| (_) | |\  |
- |_|  \__,_|_|\_____\___/|_| \_| v.01 (Beta)
+ |_|  \__,_|_|\_____\___/|_| \_| v-0.1 (Beta)
      OmidNasiri.P@Gmail.COM  
             ''')
 
@@ -41,7 +50,13 @@ def target_mkdir():
     try:
         os.makedirs(target)
     except:
-        print(Fore.RED+"Target Directory Already Exists\n"+Fore.WHITE)
+        print(Fore.RED+"Target Directory Already Exists, \nBe careful, the files will be overwritten."+Fore.WHITE)
+        q = input(Fore.YELLOW+'Do you agree to overwrite the files? (Y/N): '+Fore.WHITE)
+        l = ['y','yes','Y','YES']
+        if q in l:
+            pass
+        else:
+            quit()
 
 ############# CHECK TARGET IS UP + Print HTTP HEADER ############
 def target_check():
@@ -84,7 +99,7 @@ def backup_file():
         backup_url = 'https://'+target+"/"+bak
         #print(Fore.CYAN+'CHECK :',backup_url+Fore.WHITE)
         curl_response = requests.get(backup_url)
-        if curl_response.status_code is 200:
+        if curl_response.status_code == 200:
             print(Fore.CYAN+backup_url,":",Fore.GREEN+str(curl_response.status_code)+Fore.WHITE)
             response = urllib.request.urlopen(backup_url)
             data = response.read()      # a `bytes` object
@@ -98,38 +113,154 @@ def backup_file():
 
 ###### WORDPRESS USER ENUMERATION #####
 def wp_user_enum():
-    print(Fore.YELLOW+'WORDPRESS USER ENUMRATION'+Fore.WHITE)
-    curl_response = requests.get('https://'+target)
-    #print(curl_response)
-    if "WordPress" in str(curl_response.content):
-        print(target,'Using WordPress')
-        user_id_list = ['/?author=0','/?author=1','/?author=2','/?author=3','/?author=4']
-        for user_list in user_id_list:
-            if curl_response.status_code == 200:
-                user_check = 'https://'+target+"/"+user_list
+    print(Fore.YELLOW+'\nWORDPRESS USER ENUMERATION'+Fore.WHITE)
+    if os.path.exists(target+"\\USER_ENUM.txt"):
+        os.remove(target+"\\USER_ENUM.txt")
+    f = open(target+"\\USER_ENUM.txt", "a", encoding="utf-8")
+    url_list = ['','/readme.html','/license.txt']
+    for url_item in url_list:
+        curl_response = requests.get('https://'+target+url_item)
+        if "wp-" in str(curl_response.content):
+            print(target,'Using WordPress')
+            print(Fore.YELLOW+'\nMETHOD 1'+Fore.WHITE)
+            user_id_list = ['/?author=0','/?author=1','/?author=2','/?author=3','/?author=4']
+            for user_list_item in user_id_list:
+                user_check = 'https://'+target+user_list_item
                 curl_response = requests.get(user_check)
-                #print(curl_response.content)
-                
-
-                match = re.search(r'<span class="comment-author-link">(.*?)</span>', str(curl_response._content))
-                if match:
-                    value = match.group(1)
+                if curl_response.status_code == 200:
+                    match = re.search(r'<span class="comment-author-link">(.*?)</span>', str(curl_response._content))
+                    if match:
+                        value = match.group(1)
+                        #f.write('\nmethod 1:\n'+str(value))
+                        #f.write('\nmethod 1 content: \n'+str(curl_response.content))
+                    else:
+                        print("No match found")
+                    print(Fore.CYAN,user_check,Fore.GREEN,str(curl_response.status_code),'FOUND',Fore.WHITE)
+                    f.write('method 1:\n'+str(value)+'\n')
                     print(value)
                 else:
-                    print("No match found")
-
-
-                print(Fore.CYAN,user_check,Fore.GREEN+'FOUND',Fore.WHITE)
+                    print(Fore.CYAN,user_check,Fore.RED,str(curl_response.status_code),'NOT FOUND',Fore.WHITE)
+                    break
+            print(Fore.YELLOW+'\nMETHOD 2'+Fore.WHITE)
+            curl_response = requests.get('https://'+target+'/wp-json/wp/v2/users')
+            if curl_response.status_code == 200:
+                json_data = json.loads(curl_response.content)
+                enum=str(Fore.GREEN+'FOUND '+Fore.WHITE+' NAME: '+json_data[0]['name']+Fore.GREEN+' USERNAME: '+json_data[0]['slug']+Fore.WHITE+' URL: '+json_data[0]['link'])
+                f.write('\nmethod 2: \n'+'NAME: '+json_data[0]['name']+' USERNAME: '+json_data[0]['slug']+' URL: '+json_data[0]['link'])
+                print(enum)
             else:
-                print(Fore.CYAN,user_check,Fore.RED+'Not Found',Fore.WHITE)
+                pass
+            print(Fore.RED+'Trying to Bypass...',Fore.WHITE)
+            curl_response2 = requests.get('https://'+target+'/?rest_route=/wp/v2/usErs')
+            if curl_response2.status_code == 200:
+                json_data = json.loads(curl_response2.content)
+                enum=str(Fore.GREEN+'FOUND '+Fore.WHITE+' NAME: '+json_data[0]['name']+Fore.GREEN+' USERNAME: '+json_data[0]['slug']+Fore.WHITE+' URL: '+json_data[0]['link'])
+                f.write('\nmethod 2: \n'+'NAME: '+json_data[0]['name']+' USERNAME: '+json_data[0]['slug']+' URL: '+json_data[0]['link'])
+                print(enum)
+            else:
+                curl_response3 = requests.get('https://'+target+'/section/news?rest_route=/wp/v2/usErs')
+                if curl_response3.status_code == 200:
+                    json_data = json.loads(curl_response3.content)
+                    enum=str(Fore.GREEN+'FOUND '+Fore.WHITE+' NAME: '+json_data[0]['name']+Fore.GREEN+' USERNAME: '+json_data[0]['slug']+Fore.WHITE+' URL: '+json_data[0]['link'])
+                    f.write('\nmethod 2: \n'+'NAME: '+json_data[0]['name']+' USERNAME: '+json_data[0]['slug']+' URL: '+json_data[0]['link'])
+                    print(enum)
+                else:
+                    print(Fore.RED+'The target is not responding to this method.'+Fore.WHITE)
+            break
+        else:
+            print(Fore.RED+'Is Target using another content management system or is it trying to fool us!!!'+Fore.WHITE)
+            print(Fore.YELLOW+'Trying to find Signatures...'+Fore.WHITE)
+            pass
+    f.close()
+
+
+
+def dir_browse():
+    print(Fore.YELLOW+'\nDirectory Browsing Check'+Fore.WHITE)
+    curl_css = requests.get('https://'+target)
+    if curl_css.status_code == 403:
+        print(Fore.RED+'\nTarget is not responding!!!'+Fore.WHITE)
     else:
-        print('Customized CMS')
+        css_pattern = re.compile(r"http[^']*\.css")
+        css_urls = css_pattern.findall(str(curl_css.content))
+        #print(css_urls[0])
+        single_css = re.compile(r"http.*\/")
+        css_urls = single_css.findall(str(css_urls[0]))
+        curl_css_response = requests.get(css_urls[0])
+        if "Index of" in str(curl_css_response.content):
+            print('\nDirectory Browsing is '+Fore.GREEN+' ENABLE\n'+Fore.WHITE)
+            if os.path.exists(target+"\\DIR_BROWSE.txt"):
+                os.remove(target+"\\DIR_BROWSE.txt")
+            f = open(target+"\\DIR_BROWSE.txt", "a", encoding="utf-8")
+            f.write(str(css_urls[0])+'\n')
+            url_list = ['/wp-content/uploads/']
+            for url_item in url_list:
+                curl_response = requests.get('https://'+target+url_item)
+                if curl_response.status_code == 200:
+                    f.write('https://'+target+url_item+"\n")
+                    print(Fore.GREEN+'https://'+target+url_item+Fore.WHITE)
+                    f.write('\n\n\n'+str(curl_response.content))
+                else:
+                    print('https://'+target+url_item)
+                    print(Fore.RED+'Maybe target using Custome CMS!'+Fore.WHITE)
+            f.close()
+        else:
+            print('Directory Browsing is '+Fore.RED+' DISABLE'+Fore.WHITE)
+
+def wp_scan():
+    print(Fore.YELLOW+'\nWP SCAN'+Fore.WHITE)
+    subprocess('wpscan -u https://'+target+' --api 123 -o '+target+'\\WP_SCAN.txt')
+
+def ipinfo():
+    print(Fore.YELLOW+'\nIP INFO'+Fore.WHITE)
+    f = open(target+"\\IP_INFO.txt", "w", encoding="utf-8")
+    ip_address = socket.gethostbyname(target)
+    print(target+Fore.YELLOW+' IP '+Fore.GREEN+ip_address+Fore.WHITE)
+    f.write(target+' IP '+ip_address)
+    curl_response = requests.get('https://ipinfo.io/widget/demo/'+ip_address)
+    if curl_response.status_code == 200:
+        f.write('\n\n'+str(curl_response.content))
+        print(str(curl_response.content))
+    else:
+        f.write('\nhttps://ipinfo.io/widget/demo/'+ip_address+'  YOUR REGION HAVE BEEN BOCKED!!!')
+        f.write('\nHTTP STATUS CODE: '+str(curl_response.status_code))
+        print('HTTP STATUS CODE:',Fore.YELLOW,curl_response.status_code)
+        print(Fore.RED+'YOUR REGION HAVE BEEN BOCKED!!!'+Fore.WHITE)
+    f.close()
 
 
-#clear()
+def wayback():
+    print(Fore.YELLOW+'\nWayBack Machine'+Fore.WHITE)
+    wayback_curl_response = requests.get('http://web.archive.org/cdx/search/cdx?url='+target+'/*&limit=5&output=json')
+    wayback_curl_response2 = [
+    ["urlkey", "timestamp", "original", "mimetype", "statuscode", "digest", "length"],
+    ["ir,n-moj)/", "20161026215747", "http://n-moj.ir:80/", "text/html", "200", "DGCR5S73SH42VMACNQ3J5YF74M5TVIAC", "2370"],
+    ["ir,n-moj)/", "20170108094820", "http://www.n-moj.ir:80/", "text/html", "200", "BY4GHTMO5BVSP4ILJKO7SRPHBNN2B322", "2368"],
+    ["ir,n-moj)/", "20170214164442", "http://n-moj.ir:80/", "text/html", "200", "BY4GHTMO5BVSP4ILJKO7SRPHBNN2B322", "2369"]
+]
+
+    #for row in wayback_curl_response[1:]:  # Skip the header row
+        #print(f"Original: {row[2]}, , "+)
+        #print(Fore.YELLOW+f"Time Stamp: {row[1]}"+Fore.CYAN+f" StatusCode: {row[4]}"+Fore.WHITE+f" URL: {row[2]}")
+    if wayback_curl_response.status_code == 200:
+        #print(Fore.YELLOW+f"Time Stamp: {row[1]}"+Fore.CYAN+f" StatusCode: {row[4]}"+Fore.WHITE+f" URL: {row[2]}")
+        json_data = json.loads(wayback_curl_response.content)
+        print('URL: '+json_data[0]['original'],'Status Code: '+json_data[0]['statuscode'],'Time Stamp: '+json_data[0]['timestamp'])
+        f = open(target+"\\WAY_BACK.txt", "w", encoding="utf-8")
+        f.write(str(wayback_curl_response.content))
+        f.close()
+    else:
+        print('Status Code: '+Fore.YELLOW+str(wayback_curl_response.status_code)+Fore.RED+'\nArchive.org BLOCKED OUR REGION!!!'+Fore.WHITE)
+
+
+clear()
 banner()
 target_mkdir()
-#target_check()
-#nmap()
-#backup_file()
+target_check()
+nmap()
+backup_file()
 wp_user_enum()
+dir_browse()
+#wp_scan()
+ipinfo()
+wayback()
