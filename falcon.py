@@ -273,7 +273,7 @@ def dir_browse(headers):
 
 def wp_scan(headers):
     print(Fore.YELLOW+'\nWP SCAN'+Fore.WHITE)
-    subprocess('wpscan -u https://'+target+' --api jEjWaAIEbuFUwbsgc12sMZClFWk3DVlapg5m9pIDBnU -o '+target+'\\WP_SCAN.txt')
+    subprocess('wpscan -u https://'+target+' --api [api] -o '+target+'\\WP_SCAN.txt')
 
 def ipinfo(headers):
     print(Fore.YELLOW+'\nIP INFO'+Fore.WHITE)
@@ -298,9 +298,9 @@ def wayback(headers):
     wayback_curl_response = requests.get('http://web.archive.org/cdx/search/cdx?url='+target+'/*&limit=5&output=json',verify=False,headers=headers)
     wayback_curl_response2 = [
     ["urlkey", "timestamp", "original", "mimetype", "statuscode", "digest", "length"],
-    ["ir,n-moj)/", "20161026215747", "http://n-moj.ir:80/", "text/html", "200", "DGCR5S73SH42VMACNQ3J5YF74M5TVIAC", "2370"],
-    ["ir,n-moj)/", "20170108094820", "http://www.n-moj.ir:80/", "text/html", "200", "BY4GHTMO5BVSP4ILJKO7SRPHBNN2B322", "2368"],
-    ["ir,n-moj)/", "20170214164442", "http://n-moj.ir:80/", "text/html", "200", "BY4GHTMO5BVSP4ILJKO7SRPHBNN2B322", "2369"]
+    ["ir,test)/", "20161026215747", "http://test.ir:80/", "text/html", "200", "DGCR5S73SH42VMACNQ3J5YF74M5TVIAC", "2370"],
+    ["ir,test)/", "20170108094820", "http://www.test.ir:80/", "text/html", "200", "BY4GHTMO5BVSP4ILJKO7SRPHBNN2B322", "2368"],
+    ["ir,test)/", "20170214164442", "http://test.ir:80/", "text/html", "200", "BY4GHTMO5BVSP4ILJKO7SRPHBNN2B322", "2369"]
 ]
 
     #for row in wayback_curl_response[1:]:  # Skip the header row
