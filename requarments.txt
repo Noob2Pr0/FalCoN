@@ -2,3 +2,7 @@ requests
 colorama
 python3-namp
 bs4
+selenium
+webdriver_manager
+counter
+ThreadPoolExecutor
